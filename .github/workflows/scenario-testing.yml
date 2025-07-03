@@ -1,0 +1,262 @@
+name: Scenario Testing - Fitness Functions
+
+on:
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: 'Test scenario to run'
+        required: true
+        type: choice
+        options:
+        - healthy_system
+        - degraded_system
+        - critical_failure
+        - partial_failure
+        - high_load
+        - stress_test
+        - all_scenarios
+      num_iterations:
+        description: 'Number of test iterations'
+        required: false
+        default: '3'
+        type: string
+      timeout_minutes:
+        description: 'Timeout in minutes'
+        required: false
+        default: '10'
+        type: string
+
+env:
+  PYTHON_VERSION: '3.9'
+
+jobs:
+  scenario-testing:
+    name: 🎯 Scenario Testing - ${{ github.event.inputs.scenario }}
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ github.event.inputs.timeout_minutes || 10 }}
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🐍 Set up Python ${{ env.PYTHON_VERSION }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: 🔧 Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: 🎯 Run scenario tests
+      id: scenario-tests
+      run: |
+        echo "🎯 Running scenario: ${{ github.event.inputs.scenario }}"
+        echo "🔄 Iterations: ${{ github.event.inputs.num_iterations }}"
+        
+        # Create results directory
+        mkdir -p scenario-results
+        
+        # Run the specified scenario
+        python -c "
+        from fitness_functions import fitness_functions
+        import json
+        import time
+        import sys
+        
+        scenario = '${{ github.event.inputs.scenario }}'
+        iterations = int('${{ github.event.inputs.num_iterations }}')
+        
+        print(f'Running {scenario} scenario for {iterations} iterations...')
+        
+        results = []
+        
+        for i in range(iterations):
+            print(f'\\n--- Iteration {i+1}/{iterations} ---')
+            
+            # Reset all services to healthy state
+            for service_name in fitness_functions.services:
+                fitness_functions.simulate_service_failure(service_name, True)
+            
+            # Apply scenario-specific conditions
+            if scenario == 'healthy_system':
+                # All services healthy (default state)
+                pass
+                
+            elif scenario == 'degraded_system':
+                # Make some services slow
+                fitness_functions.services['payment_service'].base_response_time = 2.5
+                fitness_functions.services['logistics_service'].base_response_time = 2.0
+                
+            elif scenario == 'critical_failure':
+                # Critical service down
+                fitness_functions.simulate_service_failure('group_buying_service', False)
+                
+            elif scenario == 'partial_failure':
+                # Non-critical service down
+                fitness_functions.simulate_service_failure('notification_service', False)
+                
+            elif scenario == 'high_load':
+                # Test with high load
+                result = fitness_functions.run_availability_tests()
+                concurrent_results = fitness_functions.test_concurrent_availability(50)
+                
+                iteration_result = {
+                    'iteration': i+1,
+                    'timestamp': time.time(),
+                    'overall_score': result.overall_score,
+                    'is_healthy': result.is_healthy,
+                    'critical_path_available': result.critical_path_available,
+                    'issues': result.issues,
+                    'concurrent_success_rate': concurrent_results['success_rate'],
+                    'concurrent_requests_per_second': concurrent_results['requests_per_second']
+                }
+                results.append(iteration_result)
+                continue
+                
+            elif scenario == 'stress_test':
+                # Multiple services degraded
+                fitness_functions.services['payment_service'].base_response_time = 3.0
+                fitness_functions.services['logistics_service'].base_response_time = 2.5
+                fitness_functions.services['order_service'].base_response_time = 2.0
+                fitness_functions.simulate_service_failure('cache', False)
+                
+            elif scenario == 'all_scenarios':
+                # Run all scenarios in sequence
+                scenarios = ['healthy_system', 'degraded_system', 'critical_failure', 'partial_failure']
+                for sub_scenario in scenarios:
+                    print(f'\\n--- Running {sub_scenario} ---')
+                    # Reset and apply scenario
+                    for service_name in fitness_functions.services:
+                        fitness_functions.simulate_service_failure(service_name, True)
+                    
+                    if sub_scenario == 'degraded_system':
+                        fitness_functions.services['payment_service'].base_response_time = 2.5
+                        fitness_functions.services['logistics_service'].base_response_time = 2.0
+                    elif sub_scenario == 'critical_failure':
+                        fitness_functions.simulate_service_failure('group_buying_service', False)
+                    elif sub_scenario == 'partial_failure':
+                        fitness_functions.simulate_service_failure('notification_service', False)
+                    
+                    result = fitness_functions.run_availability_tests()
+                    iteration_result = {
+                        'scenario': sub_scenario,
+                        'iteration': i+1,
+                        'timestamp': time.time(),
+                        'overall_score': result.overall_score,
+                        'is_healthy': result.is_healthy,
+                        'critical_path_available': result.critical_path_available,
+                        'issues': result.issues
+                    }
+                    results.append(iteration_result)
+                continue
+            
+            # Run availability tests
+            result = fitness_functions.run_availability_tests()
+            
+            iteration_result = {
+                'iteration': i+1,
+                'timestamp': time.time(),
+                'overall_score': result.overall_score,
+                'is_healthy': result.is_healthy,
+                'critical_path_available': result.critical_path_available,
+                'issues': result.issues
+            }
+            results.append(iteration_result)
+        
+        # Calculate summary statistics
+        scores = [r['overall_score'] for r in results]
+        healthy_count = sum(1 for r in results if r['is_healthy'])
+        critical_path_count = sum(1 for r in results if r['critical_path_available'])
+        
+        summary = {
+            'scenario': scenario,
+            'iterations': iterations,
+            'timestamp': time.time(),
+            'summary': {
+                'average_score': sum(scores) / len(scores),
+                'min_score': min(scores),
+                'max_score': max(scores),
+                'healthy_rate': healthy_count / len(results),
+                'critical_path_rate': critical_path_count / len(results),
+                'total_issues': sum(len(r['issues']) for r in results)
+            },
+            'results': results
+        }
+        
+        # Save results
+        with open(f'scenario-results/{scenario}_results.json', 'w') as f:
+            json.dump(summary, f, indent=2)
+        
+        # Set output variables
+        avg_score = summary['summary']['average_score']
+        healthy_rate = summary['summary']['healthy_rate']
+        
+        print(f'\\n📊 Scenario Summary:')
+        print(f'   Average Score: {avg_score:.1f}/100')
+        print(f'   Healthy Rate: {healthy_rate:.1%}')
+        print(f'   Critical Path Rate: {summary[\"summary\"][\"critical_path_rate\"]:.1%}')
+        
+        print(f'::set-output name=average_score::{avg_score:.1f}')
+        print(f'::set-output name=healthy_rate::{healthy_rate:.1%}')
+        print(f'::set-output name=scenario::{scenario}')
+        
+        # Exit with appropriate code
+        if healthy_rate >= 0.8:
+            print('✅ Scenario test passed')
+            sys.exit(0)
+        else:
+            print('❌ Scenario test failed')
+            sys.exit(1)
+        "
+        
+    - name: 📊 Upload scenario results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: scenario-test-results-${{ github.event.inputs.scenario }}
+        path: scenario-results/
+        retention-days: 30
+        
+    - name: 📈 Generate scenario report
+      if: always()
+      run: |
+        echo "📋 Generating scenario test report..."
+        
+        if [ -f "scenario-results/${{ github.event.inputs.scenario }}_results.json" ]; then
+          echo "## 🎯 Scenario Test Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Scenario:** ${{ github.event.inputs.scenario }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Iterations:** ${{ github.event.inputs.num_iterations }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Extract summary data
+          AVG_SCORE=$(python -c "import json; data=json.load(open('scenario-results/${{ github.event.inputs.scenario }}_results.json')); print(f'{data[\"summary\"][\"average_score\"]:.1f}')")
+          HEALTHY_RATE=$(python -c "import json; data=json.load(open('scenario-results/${{ github.event.inputs.scenario }}_results.json')); print(f'{data[\"summary\"][\"healthy_rate\"]:.1%}')")
+          CRITICAL_RATE=$(python -c "import json; data=json.load(open('scenario-results/${{ github.event.inputs.scenario }}_results.json')); print(f'{data[\"summary\"][\"critical_path_rate\"]:.1%}')")
+          
+          echo "- **Average Score:** $AVG_SCORE/100" >> $GITHUB_STEP_SUMMARY
+          echo "- **Healthy Rate:** $HEALTHY_RATE" >> $GITHUB_STEP_SUMMARY
+          echo "- **Critical Path Rate:** $CRITICAL_RATE" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "$HEALTHY_RATE" != "0.0%" ]; then
+            echo "✅ Scenario test completed successfully!" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Scenario test failed - system unhealthy" >> $GITHUB_STEP_SUMMARY
+          fi
+        fi
+        
+    - name: 🎉 Success notification
+      if: success()
+      run: |
+        echo "✅ Scenario test '${{ github.event.inputs.scenario }}' completed successfully!"
+        echo "Average score: ${{ steps.scenario-tests.outputs.average_score }}/100"
+        echo "Healthy rate: ${{ steps.scenario-tests.outputs.healthy_rate }}"
+        
+    - name: 🚨 Failure notification
+      if: failure()
+      run: |
+        echo "❌ Scenario test '${{ github.event.inputs.scenario }}' failed!"
+        echo "Please check the test results and investigate the issues." 

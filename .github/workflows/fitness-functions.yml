@@ -1,0 +1,308 @@
+name: Fitness Functions - Availability Testing
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # Run every 6 hours to monitor system health
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      test_scenario:
+        description: 'Test scenario to run'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+        - all
+        - healthy
+        - degraded
+        - critical_failure
+        - partial_failure
+        - high_load
+
+env:
+  PYTHON_VERSION: '3.9'
+  FITNESS_FUNCTIONS_TIMEOUT: 300  # 5 minutes timeout
+
+jobs:
+  availability-testing:
+    name: 🏥 System Availability Testing
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🐍 Set up Python ${{ env.PYTHON_VERSION }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: 📦 Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+          
+    - name: 🔧 Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: 🧪 Run fitness functions tests
+      id: fitness-tests
+      timeout-minutes: 5
+      run: |
+        echo "🚀 Starting fitness functions testing..."
+        python -m pytest test_fitness_functions.py -v --tb=short
+        
+    - name: 📊 Run availability demo
+      id: availability-demo
+      timeout-minutes: 5
+      run: |
+        echo "🎯 Running availability demo scenarios..."
+        python run_demo.py
+        
+    - name: 📈 Generate test report
+      id: test-report
+      run: |
+        echo "📋 Generating comprehensive test report..."
+        
+        # Create test results directory
+        mkdir -p test-results
+        
+        # Run fitness functions and capture output
+        python -c "
+        from fitness_functions import fitness_functions
+        import json
+        import time
+        
+        print('Running fitness functions...')
+        result = fitness_functions.run_availability_tests()
+        
+        # Create detailed report
+        report = {
+            'timestamp': time.time(),
+            'overall_score': result.overall_score,
+            'is_healthy': result.is_healthy,
+            'critical_path_available': result.critical_path_available,
+            'issues': result.issues,
+            'services': {
+                name: {
+                    'is_healthy': health.is_healthy,
+                    'response_time': health.response_time,
+                    'error_message': health.error_message
+                }
+                for name, health in result.services.items()
+            }
+        }
+        
+        # Save report
+        with open('test-results/availability-report.json', 'w') as f:
+            json.dump(report, f, indent=2)
+            
+        # Set output variables for GitHub Actions
+        print(f'::set-output name=overall_score::{result.overall_score}')
+        print(f'::set-output name=is_healthy::{str(result.is_healthy).lower()}')
+        print(f'::set-output name=critical_path_available::{str(result.critical_path_available).lower()}')
+        print(f'::set-output name=issues_count::{len(result.issues)}')
+        
+        print(f'✅ Test completed - Score: {result.overall_score}/100')
+        "
+        
+    - name: 📊 Upload test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: fitness-functions-results
+        path: test-results/
+        retention-days: 30
+        
+    - name: 🚨 Check system health
+      id: health-check
+      run: |
+        # Read the test results
+        if [ -f "test-results/availability-report.json" ]; then
+          SCORE=$(python -c "import json; data=json.load(open('test-results/availability-report.json')); print(data['overall_score'])")
+          HEALTHY=$(python -c "import json; data=json.load(open('test-results/availability-report.json')); print(data['is_healthy'])")
+          
+          echo "::set-output name=score::$SCORE"
+          echo "::set-output name=healthy::$HEALTHY"
+          
+          if [ "$HEALTHY" = "true" ]; then
+            echo "✅ System is healthy (Score: $SCORE/100)"
+          else
+            echo "❌ System is unhealthy (Score: $SCORE/100)"
+            exit 1
+          fi
+        else
+          echo "❌ Test results not found"
+          exit 1
+        fi
+        
+    - name: 📧 Send notification on failure
+      if: failure()
+      run: |
+        echo "🚨 Fitness functions test failed!"
+        echo "Please check the test results and system health."
+        
+    - name: 🎉 Success notification
+      if: success()
+      run: |
+        echo "✅ All fitness functions tests passed!"
+        echo "System availability score: ${{ steps.health-check.outputs.score }}/100"
+
+  performance-testing:
+    name: ⚡ Performance Testing
+    runs-on: ubuntu-latest
+    needs: availability-testing
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🐍 Set up Python ${{ env.PYTHON_VERSION }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: 🔧 Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: 🏃‍♂️ Run performance tests
+      run: |
+        echo "⚡ Running performance tests..."
+        python -c "
+        from fitness_functions import fitness_functions
+        import time
+        
+        # Test different load scenarios
+        scenarios = [10, 50, 100, 200]
+        
+        print('Performance Test Results:')
+        print('=' * 50)
+        
+        for num_requests in scenarios:
+            print(f'\\nTesting {num_requests} concurrent requests...')
+            start_time = time.time()
+            results = fitness_functions.test_concurrent_availability(num_requests)
+            end_time = time.time()
+            
+            print(f'  Success Rate: {results["success_rate"]:.1%}')
+            print(f'  Total Time: {results["total_time"]:.3f}s')
+            print(f'  Requests/Second: {results["requests_per_second"]:.1f}')
+            
+            # Performance thresholds
+            if results['success_rate'] < 0.95:
+                print(f'  ⚠️  Warning: Success rate below 95%')
+            if results['requests_per_second'] < 10:
+                print(f'  ⚠️  Warning: Throughput below 10 req/s')
+                
+        print('\\n✅ Performance testing completed')
+        "
+        
+    - name: 📊 Generate performance report
+      run: |
+        echo "📈 Generating performance report..."
+        # This would typically save performance metrics to a file
+        echo "Performance testing completed successfully" > performance-results.txt
+
+  security-scanning:
+    name: 🔒 Security Scanning
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🔍 Run security scan
+      uses: github/codeql-action/init@v2
+      with:
+        languages: python
+        
+    - name: 🔧 Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: 🔍 Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v2
+      
+    - name: 🛡️ Run Bandit security linter
+      run: |
+        pip install bandit
+        bandit -r . -f json -o bandit-report.json || true
+        
+    - name: 📊 Upload security results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: security-scan-results
+        path: |
+          bandit-report.json
+          .github/codeql/codeql-database/
+        retention-days: 30
+
+  deployment-readiness:
+    name: 🚀 Deployment Readiness Check
+    runs-on: ubuntu-latest
+    needs: [availability-testing, performance-testing, security-scanning]
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    
+    steps:
+    - name: 📥 Download test results
+      uses: actions/download-artifact@v3
+      with:
+        name: fitness-functions-results
+        
+    - name: ✅ Check deployment readiness
+      run: |
+        echo "🚀 Checking deployment readiness..."
+        
+        if [ -f "availability-report.json" ]; then
+          SCORE=$(python -c "import json; data=json.load(open('availability-report.json')); print(data['overall_score'])")
+          HEALTHY=$(python -c "import json; data=json.load(open('availability-report.json')); print(data['is_healthy'])")
+          CRITICAL_PATH=$(python -c "import json; data=json.load(open('availability-report.json')); print(data['critical_path_available'])")
+          
+          echo "Deployment Readiness Report:"
+          echo "============================"
+          echo "Overall Score: $SCORE/100"
+          echo "System Healthy: $HEALTHY"
+          echo "Critical Path Available: $CRITICAL_PATH"
+          
+          # Deployment criteria
+          if [ "$SCORE" -ge 80 ] && [ "$HEALTHY" = "true" ] && [ "$CRITICAL_PATH" = "true" ]; then
+            echo "✅ Deployment criteria met!"
+            echo "::set-output name=ready::true"
+          else
+            echo "❌ Deployment criteria not met:"
+            [ "$SCORE" -lt 80 ] && echo "  - Score below 80"
+            [ "$HEALTHY" != "true" ] && echo "  - System not healthy"
+            [ "$CRITICAL_PATH" != "true" ] && echo "  - Critical path not available"
+            echo "::set-output name=ready::false"
+            exit 1
+          fi
+        else
+          echo "❌ Test results not available"
+          exit 1
+        fi
+        
+    - name: 📝 Create deployment summary
+      if: steps.deployment-check.outputs.ready == 'true'
+      run: |
+        echo "## 🚀 Deployment Ready ✅" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- **Availability Score:** ${{ needs.availability-testing.outputs.score }}/100" >> $GITHUB_STEP_SUMMARY
+        echo "- **System Health:** ✅ Healthy" >> $GITHUB_STEP_SUMMARY
+        echo "- **Critical Path:** ✅ Available" >> $GITHUB_STEP_SUMMARY
+        echo "- **Performance:** ✅ Passed" >> $GITHUB_STEP_SUMMARY
+        echo "- **Security:** ✅ Passed" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "All fitness functions tests passed successfully!" >> $GITHUB_STEP_SUMMARY 

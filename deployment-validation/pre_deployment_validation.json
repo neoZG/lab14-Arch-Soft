@@ -1,0 +1,33 @@
+{
+  "timestamp": 1751511323.8966525,
+  "scenarios_tested": [
+    "healthy_system",
+    "degraded_system",
+    "high_load"
+  ],
+  "average_score": 100.0,
+  "all_scenarios_healthy": true,
+  "critical_path_available": true,
+  "validation_passed": true,
+  "detailed_results": {
+    "healthy_system": {
+      "overall_score": 100,
+      "is_healthy": true,
+      "critical_path_available": true,
+      "issues": []
+    },
+    "degraded_system": {
+      "overall_score": 100,
+      "is_healthy": true,
+      "critical_path_available": true,
+      "issues": []
+    },
+    "high_load": {
+      "overall_score": 100,
+      "is_healthy": true,
+      "critical_path_available": true,
+      "concurrent_success_rate": 1.0,
+      "concurrent_requests_per_second": 1.604873208173571
+    }
+  }
+}
