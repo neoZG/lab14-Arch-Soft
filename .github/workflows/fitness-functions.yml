@@ -116,7 +116,7 @@ jobs:
         "
         
     - name: 📊 Upload test results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: fitness-functions-results
@@ -241,7 +241,7 @@ jobs:
         bandit -r . -f json -o bandit-report.json || true
         
     - name: 📊 Upload security results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: security-scan-results
@@ -258,7 +258,7 @@ jobs:
     
     steps:
     - name: 📥 Download test results
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         name: fitness-functions-results
         

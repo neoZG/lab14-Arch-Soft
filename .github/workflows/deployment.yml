@@ -138,7 +138,7 @@ jobs:
         "
         
     - name: 📊 Upload pre-deployment results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: pre-deployment-validation
@@ -184,7 +184,7 @@ jobs:
         # - etc.
         
     - name: 📊 Upload deployment artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: deployment-artifacts
         path: |
@@ -290,7 +290,7 @@ jobs:
         "
         
     - name: 📊 Upload post-deployment results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: post-deployment-validation
