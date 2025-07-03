@@ -1,15 +1,10 @@
-# Fitness Functions - Availability Testing
+# Fitness Functions - Simple Availability Testing
 
-Simple availability testing for a group buying platform using fitness functions.
+Tests if your group buying platform can handle the critical business path.
 
 ## What it does
 
-Tests if your system can handle the critical business path:
-1. User creates a group cart
-2. Others join and add products  
-3. Cart closes when minimum reached
-4. Order is processed and paid
-5. Logistics and delivery handled
+Tests the critical path: Create cart → Add products → Process order → Payment → Logistics
 
 ## Quick Start
 
@@ -17,38 +12,33 @@ Tests if your system can handle the critical business path:
 # Install dependencies
 pip install -r requirements.txt
 
-# Run the demo
+# Run tests
+python fitness_functions.py
+
+# Run demo
 python run_demo.py
 
-# Run tests
+# Run unit tests
 python -m pytest test_fitness_functions.py
-
-# Test locally before GitHub Actions
-python test_github_actions.py
 ```
+
+## How it works
+
+- Simulates 7 services (group buying, payment, logistics, etc.)
+- Tests individual service health
+- Tests critical path availability
+- Calculates overall score (0-100)
+
+Score ≥70 = System is healthy
+
+## GitHub Actions
+
+Automated testing runs on every push/PR. See `.github/workflows/simple-test.yml`
 
 ## Files
 
 - `fitness_functions.py` - Core testing logic
-- `run_demo.py` - Interactive demo with different scenarios
+- `run_demo.py` - Simple demo scenarios
 - `test_fitness_functions.py` - Unit tests
-- `.github/workflows/` - GitHub Actions for automated testing
-
-## How it works
-
-The system simulates 7 services (group buying, payment, logistics, etc.) and tests:
-- Individual service health
-- Critical path availability  
-- Performance under load
-- Overall system score (0-100)
-
-A score ≥80 means your system is healthy.
-
-## GitHub Actions
-
-Automated testing runs on:
-- Every code change
-- Scheduled health checks
-- Before deployments
-
-See `GITHUB_ACTIONS_README.md` for details.
+- `.github/workflows/simple-test.yml` - GitHub Actions
+git stat

@@ -1,0 +1,49 @@
+name: Simple Fitness Functions Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: 🏥 Test System Availability
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🐍 Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: 🔧 Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: 🧪 Run fitness functions
+      run: |
+        echo "🚀 Running availability tests..."
+        python fitness_functions.py
+        
+    - name: 🎯 Run demo
+      run: |
+        echo "🎯 Running demo scenarios..."
+        python run_demo.py
+        
+    - name: ✅ Success
+      if: success()
+      run: |
+        echo "✅ All tests passed!"
+        echo "System is healthy and ready for deployment."
+        
+    - name: ❌ Failure
+      if: failure()
+      run: |
+        echo "❌ Tests failed!"
+        echo "Please check the system health before deploying." 
